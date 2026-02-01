@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Escala de Café Operacional</title>
+
+<style>
+body{
+    font-family: "Segoe UI", Arial, sans-serif;
+    background:#f2f4f7;
+    margin:0;
+    padding:20px;
+}
+.container{
+    max-width:900px;
+    margin:auto;
+}
+h1{
+    text-align:center;
+    margin-bottom:15px;
+    color:#1f2d3d;
+}
+.topo{
+    display:flex;
+    justify-content:center;
+    gap:10px;
+    margin-bottom:15px;
+}
+select{
+    padding:6px;
+    font-size:14px;
+}
+table{
+    width:100%;
+    border-collapse:collapse;
+    background:#fff;
+    border-radius:6px;
+    overflow:hidden;
+}
+th, td{
+    border:1px solid #ccc;
+    padding:6px;
+    text-align:center;
+}
+th{
+    background:#1f2d3d;
+    color:#fff;
+}
+.destacado{
+    background:#fff3cd !important;
+    font-weight:bold;
+}
+.ultimo-cafe{
+    background:#ffcccc !important;
+    font-weight:bold;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>Escala de Café</h1>
+
+<div class="topo">
+    <strong>Destacar unidade:</strong>
+    <select id="filtro">
+        <option value="">-- Nenhum --</option>
+    </select>
+</div>
+
+<table>
+<thead>
+<tr>
+    <th>Nº</th>
+    <th>Início</th>
+    <th>Fim</th>
+    <th>Batalhão / Revezamento</th>
+</tr>
+</thead>
+<tbody id="tabela"></tbody>
+</table>
+
+</div>
+
+<script>
+// ===== CONFIGURAÇÃO =====
+const inicio = 6*60 + 30;
+const fim = 18*60 + 30;
+const intervalo = 30;
+
+// ===== UNIDADES =====
+const unidades = [];
+for(let i=1;i<=51;i++) unidades.push(`${i}º BPM/M`);
+unidades.push(
+    "1º DE TRÂNSITO",
+    "2º DE TRÂNSITO",
+    "BPCHOQUE",
+    "BAEP CAPITAL",
+    "BAEP METROPOLITANO",
+    "REVEZAMENTO"
+);
+
+const tabela = document.getElementById("tabela");
+const filtro = document.getElementById("filtro");
+
+// ===== FILTRO =====
+unidades.forEach(u=>{
+    const op=document.createElement("option");
+    op.value=u;
+    op.textContent=u;
+    filtro.appendChild(op);
+});
+
+// ===== FUNÇÕES =====
+function minParaHora(m){
+    return String(Math.floor(m/60)).padStart(2,"0")+"H"+String(m%60).padStart(2,"0");
+}
+
+// ===== CARREGAR ESCALA =====
+let escala = JSON.parse(localStorage.getItem("escalaCafe")) || [];
+let contador=1;
+
+for(let t=inicio; t<fim; t+=intervalo){
+    const tr=document.createElement("tr");
+    if(t===18*60) tr.classList.add("ultimo-cafe");
+
+    const salvo = escala[contador-1] || "";
+
+    let options=`<option value="">-- Selecione --</option>`;
+    unidades.forEach(u=>{
+        options+=`<option ${u===salvo?"selected":""}>${u}</option>`;
+    });
+
+    tr.innerHTML=`
+        <td>${contador}º</td>
+        <td>${minParaHora(t)}</td>
+        <td>${minParaHora(t+intervalo)}</td>
+        <td><select data-index="${contador-1}">${options}</select></td>
+    `;
+
+    tabela.appendChild(tr);
+    contador++;
+}
+
+// ===== SALVAR =====
+tabela.addEventListener("change", e=>{
+    if(e.target.tagName==="SELECT"){
+        escala[e.target.dataset.index]=e.target.value;
+        localStorage.setItem("escalaCafe", JSON.stringify(escala));
+        aplicarFiltro();
+    }
+});
+
+// ===== DESTAQUE =====
+filtro.value = localStorage.getItem("filtroCafe") || "";
+
+filtro.addEventListener("change", ()=>{
+    localStorage.setItem("filtroCafe", filtro.value);
+    aplicarFiltro();
+});
+
+function aplicarFiltro(){
+    document.querySelectorAll("tbody tr").forEach(tr=>{
+        tr.classList.remove("destacado");
+        const sel=tr.querySelector("select");
+        if(filtro.value && sel.value===filtro.value){
+            tr.classList.add("destacado");
+        }
+    });
+}
+
+aplicarFiltro();
+</script>
+
+</body>
+</html>
