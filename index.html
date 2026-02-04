@@ -12,7 +12,7 @@ body{
     padding:20px;
 }
 .container{
-    max-width:900px;
+    max-width:1000px;
     margin:auto;
 }
 h1{
@@ -23,12 +23,23 @@ h1{
 .topo{
     display:flex;
     justify-content:center;
-    gap:10px;
+    flex-wrap:wrap;
+    gap:12px;
     margin-bottom:15px;
 }
-select{
+select, input[type="date"], button{
     padding:6px;
     font-size:14px;
+}
+button{
+    cursor:pointer;
+    background:#1f2d3d;
+    color:#fff;
+    border:none;
+    border-radius:4px;
+}
+button:hover{
+    background:#2f4158;
 }
 table{
     width:100%;
@@ -54,6 +65,10 @@ th{
     background:#ffcccc !important;
     font-weight:bold;
 }
+.turno-info{
+    font-weight:bold;
+    color:#1f2d3d;
+}
 </style>
 </head>
 
@@ -64,10 +79,30 @@ th{
 <h1>Escala de Café</h1>
 
 <div class="topo">
+    <strong>Data:</strong>
+    <input type="date" id="dataEscala">
+
+    <strong>Turno do serviço:</strong>
+    <select id="turnoSelect">
+        <option value="">-- Selecione --</option>
+        <option>01h x 30min</option>
+        <option>01h30 x 30min</option>
+        <option>02h x 30min</option>
+        <option>02h30 x 30min</option>
+        <option>03h x 30min</option>
+        <option>03h30 x 30min</option>
+    </select>
+
+    <button id="salvarTurno">Confirmar Turno</button>
+
     <strong>Destacar unidade:</strong>
     <select id="filtro">
         <option value="">-- Nenhum --</option>
     </select>
+</div>
+
+<div style="text-align:center;margin-bottom:10px;">
+    <span class="turno-info" id="turnoAtual"></span>
 </div>
 
 <table>
@@ -102,8 +137,25 @@ unidades.push(
     "REVEZAMENTO"
 );
 
+// ===== ELEMENTOS =====
 const tabela = document.getElementById("tabela");
 const filtro = document.getElementById("filtro");
+const dataInput = document.getElementById("dataEscala");
+const turnoSelect = document.getElementById("turnoSelect");
+const salvarTurnoBtn = document.getElementById("salvarTurno");
+const turnoAtualSpan = document.getElementById("turnoAtual");
+
+// ===== DATA 2026 =====
+dataInput.min = "2026-01-01";
+dataInput.max = "2026-12-31";
+
+const hojeISO = new Date().toISOString().split("T")[0];
+dataInput.value = localStorage.getItem("dataCafe") || hojeISO;
+
+// ===== BANCO =====
+let bancoDias = JSON.parse(localStorage.getItem("escalaCafeDias")) || {};
+let bancoTurnos = JSON.parse(localStorage.getItem("turnosCafe")) || {};
+let escala = [];
 
 // ===== FILTRO =====
 unidades.forEach(u=>{
@@ -118,39 +170,82 @@ function minParaHora(m){
     return String(Math.floor(m/60)).padStart(2,"0")+"H"+String(m%60).padStart(2,"0");
 }
 
-// ===== CARREGAR ESCALA =====
-let escala = JSON.parse(localStorage.getItem("escalaCafe")) || [];
-let contador=1;
+function carregarEscalaDoDia(data){
+    escala = bancoDias[data] || [];
+    tabela.innerHTML = "";
 
-for(let t=inicio; t<fim; t+=intervalo){
-    const tr=document.createElement("tr");
-    if(t===18*60) tr.classList.add("ultimo-cafe");
+    let contador = 1;
+    for(let t=inicio; t<fim; t+=intervalo){
+        const tr=document.createElement("tr");
+        if(t===18*60) tr.classList.add("ultimo-cafe");
 
-    const salvo = escala[contador-1] || "";
+        const salvo = escala[contador-1] || "";
 
-    let options=`<option value="">-- Selecione --</option>`;
-    unidades.forEach(u=>{
-        options+=`<option ${u===salvo?"selected":""}>${u}</option>`;
-    });
+        let options=`<option value="">-- Selecione --</option>`;
+        unidades.forEach(u=>{
+            options+=`<option ${u===salvo?"selected":""}>${u}</option>`;
+        });
 
-    tr.innerHTML=`
-        <td>${contador}º</td>
-        <td>${minParaHora(t)}</td>
-        <td>${minParaHora(t+intervalo)}</td>
-        <td><select data-index="${contador-1}">${options}</select></td>
-    `;
+        tr.innerHTML=`
+            <td>${contador}º</td>
+            <td>${minParaHora(t)}</td>
+            <td>${minParaHora(t+intervalo)}</td>
+            <td><select data-index="${contador-1}">${options}</select></td>
+        `;
 
-    tabela.appendChild(tr);
-    contador++;
+        tabela.appendChild(tr);
+        contador++;
+    }
+
+    carregarTurno(data);
+    aplicarFiltro();
 }
 
-// ===== SALVAR =====
+function carregarTurno(data){
+    const turno = bancoTurnos[data];
+    if(turno){
+        turnoAtualSpan.textContent = `Turno do dia: ${turno}`;
+        turnoSelect.value = turno;
+    }else{
+        turnoAtualSpan.textContent = "Turno do dia: não definido";
+        turnoSelect.value = "";
+    }
+}
+
+// ===== SALVAR ESCALA =====
 tabela.addEventListener("change", e=>{
     if(e.target.tagName==="SELECT"){
         escala[e.target.dataset.index]=e.target.value;
-        localStorage.setItem("escalaCafe", JSON.stringify(escala));
+        bancoDias[dataInput.value] = escala;
+        localStorage.setItem("escalaCafeDias", JSON.stringify(bancoDias));
         aplicarFiltro();
     }
+});
+
+// ===== TURNO =====
+salvarTurnoBtn.addEventListener("click", ()=>{
+    if(!turnoSelect.value){
+        alert("Selecione um turno antes de confirmar.");
+        return;
+    }
+
+    const atual = bancoTurnos[dataInput.value];
+    if(atual && atual !== turnoSelect.value){
+        if(!confirm("Já existe um turno salvo para este dia. Deseja substituir?")){
+            turnoSelect.value = atual;
+            return;
+        }
+    }
+
+    bancoTurnos[dataInput.value] = turnoSelect.value;
+    localStorage.setItem("turnosCafe", JSON.stringify(bancoTurnos));
+    carregarTurno(dataInput.value);
+});
+
+// ===== TROCA DE DIA =====
+dataInput.addEventListener("change", ()=>{
+    localStorage.setItem("dataCafe", dataInput.value);
+    carregarEscalaDoDia(dataInput.value);
 });
 
 // ===== DESTAQUE =====
@@ -171,7 +266,8 @@ function aplicarFiltro(){
     });
 }
 
-aplicarFiltro();
+// ===== INICIAR =====
+carregarEscalaDoDia(dataInput.value);
 </script>
 
 </body>
